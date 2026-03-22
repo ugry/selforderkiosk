@@ -1,0 +1,63 @@
+{% extends "admin/base.html" %}
+{% block title %}Reports{% endblock %}
+{% block page_title %}Sales Reports{% endblock %}
+{% set active = 'reports' %}
+{% block content %}
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+
+  <div class="card">
+    <h2>Top Selling Items</h2>
+    <table>
+      <thead><tr><th>Item</th><th>Qty Sold</th><th>Revenue</th></tr></thead>
+      <tbody>
+        {% for row in top_items %}
+        <tr>
+          <td>{{ row.name }}</td>
+          <td><strong>{{ row.total_qty }}</strong></td>
+          <td style="color:#FF6B00;font-weight:bold">€{{ "%.2f"|format(row.total_revenue|float) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>Daily Revenue (last 14 days)</h2>
+    <canvas id="revenueChart" height="280"></canvas>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+    <script>
+      const labels = [{% for r in daily_data %}"{{ r.day }}",{% endfor %}];
+      const revenues = [{% for r in daily_data %}{{ r.revenue|float }},{% endfor %}];
+      const counts   = [{% for r in daily_data %}{{ r.count }},{% endfor %}];
+      new Chart(document.getElementById('revenueChart'), {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            { label: 'Revenue (€)', data: revenues, backgroundColor: 'rgba(255,107,0,.7)', yAxisID: 'y' },
+            { label: 'Orders', data: counts, type: 'line', borderColor: '#3498db', backgroundColor: 'transparent', yAxisID: 'y1', tension:.3 },
+          ]
+        },
+        options: {
+          responsive: true,
+          interaction: { mode: 'index' },
+          scales: {
+            y: { title:{ display:true, text:'Revenue (€)' }},
+            y1:{ position:'right', title:{ display:true, text:'Orders' }, grid:{ drawOnChartArea:false } },
+          }
+        }
+      });
+    </script>
+  </div>
+</div>
+
+<!-- API export links -->
+<div class="card">
+  <h2>Export (Admin API)</h2>
+  <p style="color:#888;font-size:13px;margin-bottom:12px">Download raw data as JSON via these API endpoints:</p>
+  <div style="display:flex;gap:12px;flex-wrap:wrap">
+    <a href="/admin/api/sales-report" class="btn btn-blue" target="_blank">📥 Sales Report JSON</a>
+    <a href="/admin/api/orders" class="btn btn-blue" target="_blank">📥 All Orders JSON</a>
+  </div>
+</div>
+{% endblock %}

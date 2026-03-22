@@ -1,0 +1,81 @@
+{% extends "admin/base.html" %}
+{% block title %}Categories{% endblock %}
+{% block page_title %}Categories{% endblock %}
+{% set active = 'categories' %}
+{% block content %}
+<div style="display:grid;grid-template-columns:1fr 380px;gap:20px">
+
+  <!-- List -->
+  <div class="card">
+    <h2>All Categories</h2>
+    <table>
+      <thead><tr><th>ID</th><th>Name</th><th>Description</th><th>Order</th><th>Active</th><th>Actions</th></tr></thead>
+      <tbody>
+        {% for c in categories %}
+        <tr>
+          <td>{{ c.id }}</td>
+          <td><strong>{{ c.name }}</strong></td>
+          <td style="color:#888;font-size:13px">{{ c.description or '—' }}</td>
+          <td>{{ c.sort_order }}</td>
+          <td>{% if c.is_active %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-red">No</span>{% endif %}</td>
+          <td>
+            <button class="btn btn-outline btn-sm" onclick="editCat({{ c.id }},'{{ c.name }}','{{ c.description or '' }}',{{ c.sort_order }},{{ 'true' if c.is_active else 'false' }})">Edit</button>
+            <form method="post" action="/admin/categories/{{ c.id }}/delete" style="display:inline" onsubmit="return confirm('Delete category?')">
+              <button class="btn btn-danger btn-sm" type="submit">Delete</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Add/Edit form -->
+  <div class="card" id="form-card">
+    <h2 id="form-title">Add Category</h2>
+    <form method="post" id="cat-form">
+      <input type="hidden" name="cat_id" id="cat_id">
+      <div class="form-group">
+        <label>Name *</label>
+        <input type="text" name="name" id="cat_name" required>
+      </div>
+      <div class="form-group">
+        <label>Description</label>
+        <input type="text" name="description" id="cat_desc">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Sort Order</label>
+          <input type="number" name="sort_order" id="cat_sort" value="0">
+        </div>
+        <div class="form-group" style="justify-content:flex-end">
+          <label>Active</label>
+          <input type="checkbox" name="is_active" id="cat_active" checked style="width:auto;margin-top:6px">
+        </div>
+      </div>
+      <button class="btn btn-primary" type="submit">💾 Save</button>
+      <button class="btn btn-outline" type="button" onclick="resetForm()">✕ Clear</button>
+    </form>
+  </div>
+</div>
+
+<script>
+function editCat(id,name,desc,order,active){
+  document.getElementById('cat_id').value = id;
+  document.getElementById('cat_name').value = name;
+  document.getElementById('cat_desc').value = desc;
+  document.getElementById('cat_sort').value = order;
+  document.getElementById('cat_active').checked = active;
+  document.getElementById('form-title').textContent = 'Edit Category';
+  document.getElementById('form-card').scrollIntoView({behavior:'smooth'});
+}
+function resetForm(){
+  document.getElementById('cat_id').value='';
+  document.getElementById('cat_name').value='';
+  document.getElementById('cat_desc').value='';
+  document.getElementById('cat_sort').value=0;
+  document.getElementById('cat_active').checked=true;
+  document.getElementById('form-title').textContent='Add Category';
+}
+</script>
+{% endblock %}

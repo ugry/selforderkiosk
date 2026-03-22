@@ -1,0 +1,277 @@
+{% extends "admin/base.html" %}
+{% block title %}Settings{% endblock %}
+{% block page_title %}System Settings{% endblock %}
+{% set active = 'settings' %}
+{% block extra_head %}
+<style>
+  .color-preview{display:flex;align-items:center;gap:10px}
+  input[type=color]{width:50px;height:36px;padding:2px;border-radius:6px;cursor:pointer}
+  .section-title{font-size:13px;font-weight:700;color:#FF6B00;text-transform:uppercase;letter-spacing:1px;margin:22px 0 12px;padding-bottom:6px;border-bottom:2px solid #FF6B00}
+</style>
+{% endblock %}
+{% block content %}
+<form method="post" enctype="multipart/form-data">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+
+    <!-- Left column -->
+    <div>
+      <div class="card">
+        <h2>Restaurant Info</h2>
+        <div class="form-group">
+          <label>Restaurant Name</label>
+          <input type="text" name="restaurant_name" value="{{ s.restaurant_name or '' }}">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Logo (upload new)</label>
+            <input type="file" name="logo" accept="image/*">
+            {% if s and s.logo_url %}
+            <img src="{{ s.logo_url }}" style="height:50px;margin-top:6px;border-radius:4px">
+            {% endif %}
+          </div>
+          <div class="form-group">
+            <label>Banner (upload new)</label>
+            <input type="file" name="banner" accept="image/*">
+            {% if s and s.banner_url %}
+            <img src="{{ s.banner_url }}" style="height:50px;margin-top:6px;border-radius:4px">
+            {% endif %}
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Receipt Footer Text</label>
+          <input type="text" name="receipt_footer" value="{{ s.receipt_footer or '' }}">
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Color Scheme</h2>
+        {% for fname, label, default in [
+            ('primary_color',    'Primary (buttons, accents)', '#FF6B00'),
+            ('secondary_color',  'Secondary (dark bg)',        '#1A1A1A'),
+            ('background_color', 'Background',                 '#FFFFFF'),
+            ('text_color',       'Text Color',                 '#222222'),
+            ('button_color',     'Button Color',               '#FF6B00'),
+        ] %}
+        <div class="form-group color-preview" style="flex-direction:row;align-items:center;gap:12px;margin-bottom:10px">
+          <input type="color" name="{{ fname }}" value="{{ s[fname] if s else default }}" style="flex-shrink:0">
+          <label style="margin:0">{{ label }}</label>
+        </div>
+        {% endfor %}
+      </div>
+
+      <div class="card">
+        <h2>Typography</h2>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Font Family</label>
+            <select name="font_family">
+              {% for f in ['Arial','Roboto','Open Sans','Lato','Montserrat','Georgia','Courier New'] %}
+              <option value="{{ f }}" {% if s and s.font_family==f %}selected{% endif %}>{{ f }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Base Font Size (px)</label>
+            <input type="number" name="font_size_base" value="{{ s.font_size_base if s else 18 }}" min="12" max="36">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right column -->
+    <div>
+      <div class="card">
+        <h2>Currency &amp; VAT</h2>
+
+        <div class="section-title">Currency</div>
+        <div class="form-group" style="margin-bottom:12px">
+          <label>Select Currency</label>
+          <select id="currency_preset" onchange="applyCurrency(this)">
+            <option value="">— choose preset —</option>
+            <option value="€|EUR"   {% if s and s.currency_code=='EUR' %}selected{% endif %}>🇪🇺  Euro (€, EUR)</option>
+            <option value="₺|TRY"   {% if s and s.currency_code=='TRY' %}selected{% endif %}>🇹🇷  Turkish Lira (₺, TRY)</option>
+            <option value="Ft|HUF"  {% if s and s.currency_code=='HUF' %}selected{% endif %}>🇭🇺  Hungarian Forint (Ft, HUF)</option>
+            <option value="$|USD"   {% if s and s.currency_code=='USD' %}selected{% endif %}>🇺🇸  US Dollar ($, USD)</option>
+            <option value="£|GBP"   {% if s and s.currency_code=='GBP' %}selected{% endif %}>🇬🇧  British Pound (£, GBP)</option>
+            <option value="CHF|CHF" {% if s and s.currency_code=='CHF' %}selected{% endif %}>🇨🇭  Swiss Franc (CHF)</option>
+            <option value="zł|PLN"  {% if s and s.currency_code=='PLN' %}selected{% endif %}>🇵🇱  Polish Zloty (zł, PLN)</option>
+            <option value="Kč|CZK"  {% if s and s.currency_code=='CZK' %}selected{% endif %}>🇨🇿  Czech Koruna (Kč, CZK)</option>
+            <option value="kr|SEK"  {% if s and s.currency_code=='SEK' %}selected{% endif %}>🇸🇪  Swedish Krona (kr, SEK)</option>
+            <option value="kr|NOK"  {% if s and s.currency_code=='NOK' %}selected{% endif %}>🇳🇴  Norwegian Krone (kr, NOK)</option>
+            <option value="lei|RON" {% if s and s.currency_code=='RON' %}selected{% endif %}>🇷🇴  Romanian Leu (lei, RON)</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Symbol <span style="font-weight:normal;color:#888">(auto-filled, editable)</span></label>
+            <input type="text" id="currency_symbol" name="currency_symbol"
+                   value="{{ s.currency_symbol if s else '€' }}" maxlength="5">
+          </div>
+          <div class="form-group">
+            <label>Code <span style="font-weight:normal;color:#888">(3 letters)</span></label>
+            <input type="text" id="currency_code" name="currency_code"
+                   value="{{ s.currency_code if s else 'EUR' }}" maxlength="3"
+                   style="text-transform:uppercase">
+          </div>
+        </div>
+
+        <div class="section-title" style="margin-top:18px">VAT Rate</div>
+
+        {# Quick-select buttons for the most common VAT rates #}
+        <div style="margin-bottom:10px">
+          <label style="display:block;margin-bottom:6px">Quick select</label>
+          <div style="display:flex;flex-wrap:wrap;gap:6px">
+            {% for rate, label in [
+                (0,   '0% — Exempt'),
+                (1,   '1%'),
+                (5,   '5%'),
+                (7,   '7% — DE reduced'),
+                (8,   '8%'),
+                (9,   '9% — NL reduced'),
+                (10,  '10% — TR food'),
+                (18,  '18%'),
+                (19,  '19% — DE standard'),
+                (20,  '20% — TR / EU standard'),
+                (21,  '21% — NL / ES'),
+                (22,  '22% — IT'),
+                (25,  '25%'),
+                (27,  '27% — HU standard'),
+            ] %}
+            <button type="button"
+                    onclick="setVat({{ rate }})"
+                    style="padding:5px 10px;border:1px solid #ddd;border-radius:6px;
+                           background:{% if s and s.tax_rate|float == rate %}#FF6B00;color:#fff{% else %}#f8f8f8;color:#333{% endif %};
+                           font-size:12px;cursor:pointer"
+                    id="vat_btn_{{ rate }}">
+              {{ label }}
+            </button>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div class="form-row" style="align-items:flex-end">
+          <div class="form-group" style="max-width:180px">
+            <label>VAT Rate (%)</label>
+            <input type="number" id="tax_rate" name="tax_rate" step="0.01" min="0" max="100"
+                   value="{{ s.tax_rate|float if s else 0 }}"
+                   oninput="highlightVatBtn(this.value)"
+                   style="font-size:18px;font-weight:bold;color:#FF6B00">
+          </div>
+          <div style="padding-bottom:10px;font-size:12px;color:#888;line-height:1.6">
+            <strong>Standard rates:</strong><br>
+            🇹🇷 Turkey: 20% (standard), 10% (food)<br>
+            🇭🇺 Hungary: 27% (standard), 18% / 5% (reduced)<br>
+            🇩🇪 Germany: 19% (standard), 7% (reduced)<br>
+            🇪🇺 EU avg: 21%
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Payment Gateway</h2>
+        <div class="form-group">
+          <label>Provider</label>
+          <select name="payment_gateway">
+            {% for gw in ['none','stripe','paypal','square','sumup','izettle'] %}
+            <option value="{{ gw }}" {% if s and s.payment_gateway==gw %}selected{% endif %}>{{ gw|capitalize }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>API Key / Publishable Key</label>
+          <input type="text" name="payment_api_key" placeholder="sk_live_... or leave blank to keep existing">
+        </div>
+        <div class="form-group">
+          <label>Secret Key</label>
+          <input type="password" name="payment_secret" placeholder="Leave blank to keep existing">
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Kitchen Printer</h2>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Printer IP Address</label>
+            <input type="text" name="printer_kitchen_ip" value="{{ s.printer_kitchen_ip or '' }}" placeholder="192.168.1.50">
+          </div>
+          <div class="form-group">
+            <label>Port</label>
+            <input type="number" name="printer_kitchen_port" value="{{ s.printer_kitchen_port or 9100 }}">
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Kiosk Behaviour</h2>
+        <div class="form-group">
+          <label>Idle Timeout (seconds – before screen reset)</label>
+          <input type="number" name="idle_timeout_sec" value="{{ s.idle_timeout_sec if s else 120 }}" min="10">
+        </div>
+        <div class="form-group" style="margin-top:12px">
+          <label>Kiosk Display Language</label>
+          <select name="kiosk_language">
+            {% set cur_lang = s.kiosk_language if s else 'en' %}
+            <option value="en" {% if cur_lang == 'en' %}selected{% endif %}>🇬🇧  English</option>
+            <option value="tr" {% if cur_lang == 'tr' %}selected{% endif %}>🇹🇷  Türkçe (Turkish)</option>
+            <option value="de" {% if cur_lang == 'de' %}selected{% endif %}>🇩🇪  Deutsch (German)</option>
+            <option value="hu" {% if cur_lang == 'hu' %}selected{% endif %}>🇭🇺  Magyar (Hungarian)</option>
+            <option value="es" {% if cur_lang == 'es' %}selected{% endif %}>🇪🇸  Español (Spanish)</option>
+            <option value="fr" {% if cur_lang == 'fr' %}selected{% endif %}>🇫🇷  Français (French)</option>
+            <option value="ru" {% if cur_lang == 'ru' %}selected{% endif %}>🇷🇺  Русский (Russian)</option>
+            <option value="ar" {% if cur_lang == 'ar' %}selected{% endif %}>🇸🇦  العربية (Arabic)</option>
+          </select>
+          <span style="font-size:11px;color:#888;margin-top:4px">
+            Sets the language shown to customers on the kiosk touch-screen.
+          </span>
+        </div>
+        <div class="form-row" style="margin-top:8px">
+          <label><input type="checkbox" name="show_promotions" {% if not s or s.show_promotions %}checked{% endif %}> Show Promotions Banner</label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="text-align:right;margin-top:8px">
+    <button class="btn btn-primary" type="submit" style="padding:12px 32px;font-size:15px">💾 Save All Settings</button>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+// ── Currency preset ────────────────────────────────────────────────────────
+function applyCurrency(sel) {
+  if (!sel.value) return;
+  var parts = sel.value.split('|');
+  document.getElementById('currency_symbol').value = parts[0];
+  document.getElementById('currency_code').value   = parts[1];
+}
+
+// ── VAT quick-select ──────────────────────────────────────────────────────
+var VAT_RATES = [0,1,5,7,8,9,10,18,19,20,21,22,25,27];
+
+function setVat(rate) {
+  document.getElementById('tax_rate').value = rate;
+  highlightVatBtn(rate);
+}
+
+function highlightVatBtn(val) {
+  var v = parseFloat(val);
+  VAT_RATES.forEach(function(r) {
+    var btn = document.getElementById('vat_btn_' + r);
+    if (!btn) return;
+    if (r === v) {
+      btn.style.background = '#FF6B00';
+      btn.style.color      = '#fff';
+      btn.style.borderColor = '#FF6B00';
+    } else {
+      btn.style.background  = '#f8f8f8';
+      btn.style.color       = '#333';
+      btn.style.borderColor = '#ddd';
+    }
+  });
+}
+
+// Highlight on page load for current saved value
+highlightVatBtn({{ s.tax_rate|float if s else 0 }});
+</script>
+{% endblock %}

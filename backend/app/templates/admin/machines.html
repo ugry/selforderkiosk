@@ -1,0 +1,109 @@
+{% extends "admin/base.html" %}
+{% block title %}Machines{% endblock %}
+{% block page_title %}Machine Management{% endblock %}
+{% set active = 'machines' %}
+{% block content %}
+<div style="display:grid;grid-template-columns:1fr 360px;gap:20px">
+  <div class="card">
+    <h2>Connected Machines</h2>
+    <table>
+      <thead>
+        <tr><th>Name</th><th>Type</th><th>IP</th><th>Printer IP</th><th>API Key</th><th>Last Seen</th><th>Actions</th></tr>
+      </thead>
+      <tbody>
+        {% for m in machines %}
+        <tr>
+          <td><strong>{{ m.name }}</strong></td>
+          <td>
+            {% if m.machine_type == 'kiosk' %}<span class="badge badge-orange">kiosk</span>
+            {% elif m.machine_type == 'monitor' %}<span class="badge badge-blue">monitor</span>
+            {% elif m.machine_type == 'kitchen' %}<span class="badge badge-green">kitchen</span>
+            {% else %}<span class="badge badge-gray">{{ m.machine_type }}</span>{% endif %}
+          </td>
+          <td style="font-size:12px">{{ m.ip_address or '—' }}</td>
+          <td style="font-size:12px">{{ m.printer_ip or '—' }}{% if m.printer_ip %}:{{ m.printer_port }}{% endif %}</td>
+          <td style="max-width:260px">
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+              <code id="key-{{ m.id }}" style="font-size:11px;background:#f0f0f0;padding:3px 7px;border-radius:4px;word-break:break-all;flex:1;min-width:0">{{ m.api_key }}</code>
+              <button class="btn btn-outline btn-sm" style="white-space:nowrap" onclick="copyApiKey('{{ m.api_key }}', this)">Copy</button>
+            </div>
+          </td>
+          <td style="font-size:12px;color:#888">{{ m.last_seen.strftime('%d/%m %H:%M') if m.last_seen else 'Never' }}</td>
+          <td style="white-space:nowrap">
+            <form method="post" action="/admin/machines/{{ m.id }}/regenerate-key" style="display:inline">
+              <button class="btn btn-outline btn-sm" type="submit" title="Regenerate API key">🔑 Regen Key</button>
+            </form>
+            <form method="post" action="/admin/machines/{{ m.id }}/delete" style="display:inline" onsubmit="return confirm('Delete machine?')">
+              <button class="btn btn-danger btn-sm">Del</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card" style="align-self:start">
+    <h2>Add Machine</h2>
+    <form method="post">
+      <div class="form-group">
+        <label>Name *</label>
+        <input type="text" name="name" placeholder="Kiosk-2" required>
+      </div>
+      <div class="form-group">
+        <label>Type *</label>
+        <select name="machine_type">
+          <option value="kiosk">Kiosk (customer order)</option>
+          <option value="monitor">Order Monitor</option>
+          <option value="kitchen">Kitchen Display</option>
+          <option value="admin">Admin</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>IP Address</label>
+        <input type="text" name="ip_address" placeholder="192.168.1.10">
+      </div>
+      <div class="form-group">
+        <label>Receipt Printer IP (optional)</label>
+        <input type="text" name="printer_ip" placeholder="192.168.1.51">
+      </div>
+      <div class="form-group">
+        <label>Printer Port</label>
+        <input type="number" name="printer_port" value="9100">
+      </div>
+      <button class="btn btn-primary" type="submit">+ Add Machine</button>
+    </form>
+    <div style="margin-top:20px;padding:12px;background:#f8f4e8;border-radius:6px;font-size:12px;color:#886644">
+      <strong>How to use API keys:</strong><br>
+      Copy the API key shown above and paste it into the machine's <code>kiosk.ini</code> or <code>monitor.ini</code> file under <code>api_key =</code>.
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function copyApiKey(key, btn) {
+  var prev = btn.textContent;
+  function done() {
+    btn.textContent = '✓ Copied';
+    setTimeout(function() { btn.textContent = prev; }, 2000);
+  }
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(key).then(done).catch(function() { _copyFallback(key, done); });
+  } else {
+    _copyFallback(key, done);
+  }
+}
+function _copyFallback(key, done) {
+  var ta = document.createElement('textarea');
+  ta.value = key;
+  ta.style.cssText = 'position:fixed;opacity:0;pointer-events:none;top:0;left:0';
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+  try { document.execCommand('copy'); } catch(e) {}
+  document.body.removeChild(ta);
+  done();
+}
+</script>
+{% endblock %}

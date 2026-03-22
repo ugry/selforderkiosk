@@ -1,0 +1,31 @@
+# Python 3.13-compatible versions
+# Tested: Debian 13 (Trixie) with Python 3.13
+#
+# Key changes from original:
+#   passlib[bcrypt]  → removed (uses 'crypt' module deleted in Python 3.13; not used)
+#   python-jose      → removed (not used in codebase)
+#   escpos==3.1      → removed (printer.py uses raw sockets, no escpos library imported)
+#   pillow==10.3.0   → pillow>=11.0.0 (first release with Python 3.13 wheels)
+#   All others       → updated to latest stable with Python 3.13 wheels available
+
+fastapi==0.115.0
+itsdangerous==2.2.0     # required by starlette SessionMiddleware
+uvicorn[standard]==0.32.0
+sqlalchemy==2.0.36
+greenlet>=3.0.3             # required by SQLAlchemy async on Python 3.13 (not auto-installed)
+asyncpg==0.30.0
+psycopg2-binary==2.9.10
+pydantic==2.9.2
+pydantic-settings==2.6.0
+python-multipart==0.0.12
+jinja2==3.1.4
+aiofiles==24.1.0
+pillow>=11.0.0
+httpx==0.27.2
+python-dotenv==1.0.1
+# python-escpos and pyserial not needed:
+# printer.py uses raw TCP sockets (port 9100) directly, no escpos library required.
+# Uncomment below only if you switch to a library-based ESC/POS implementation:
+# python-escpos>=3.1.1
+# pyserial==3.5
+websockets==13.1

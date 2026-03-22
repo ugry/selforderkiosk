@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Admin Login — Kiosk Manager</title>
+<style>
+  body{font-family:Arial,sans-serif;background:#1a1a1a;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}
+  .box{background:#fff;border-radius:12px;padding:40px;width:360px;box-shadow:0 8px 32px rgba(0,0,0,.4)}
+  .logo{text-align:center;font-size:28px;font-weight:900;color:#FF6B00;letter-spacing:3px;margin-bottom:6px}
+  .sub{text-align:center;color:#888;font-size:13px;margin-bottom:28px}
+  label{font-size:12px;font-weight:600;color:#555;display:block;margin-bottom:4px}
+  input{width:100%;padding:11px 14px;border:1px solid #ddd;border-radius:7px;font-size:15px;margin-bottom:16px;box-sizing:border-box}
+  input:focus{outline:none;border-color:#FF6B00}
+  button{width:100%;padding:12px;background:#FF6B00;color:#fff;border:none;border-radius:7px;font-size:16px;font-weight:700;cursor:pointer}
+  button:hover{background:#cc5500}
+  .err{background:#fadbd8;color:#c0392b;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:14px}
+</style>
+</head>
+<body>
+<div class="box">
+  <div class="logo">🍽 KIOSK</div>
+  <div class="sub">Admin Interface</div>
+  {% if error %}
+  <div class="err">{{ error }}</div>
+  {% endif %}
+  <form method="post">
+    <label>Username</label>
+    <input type="text" name="username" autocomplete="username" autofocus>
+    <label>Password</label>
+    <input type="password" name="password" autocomplete="current-password">
+    <button type="submit">Sign In</button>
+  </form>
+</div>
+</body>
+</html>

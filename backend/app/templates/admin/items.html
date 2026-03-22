@@ -1,0 +1,123 @@
+{% extends "admin/base.html" %}
+{% block title %}Items{% endblock %}
+{% block page_title %}Menu Items{% endblock %}
+{% set active = 'items' %}
+{% block content %}
+<div style="display:grid;grid-template-columns:1fr 420px;gap:20px">
+
+  <!-- Items list -->
+  <div class="card">
+    <h2>All Items</h2>
+    <table>
+      <thead>
+        <tr><th>Image</th><th>Name</th><th>Category</th><th>Price</th><th>Avail.</th><th>Promo</th><th>Actions</th></tr>
+      </thead>
+      <tbody>
+        {% for item in items %}
+        <tr>
+          <td>
+            {% if item.image_url %}
+            <img src="{{ item.image_url }}" style="width:48px;height:48px;object-fit:cover;border-radius:6px">
+            {% else %}
+            <div style="width:48px;height:48px;background:#eee;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:20px">🍽</div>
+            {% endif %}
+          </td>
+          <td>
+            <strong>{{ item.name }}</strong><br>
+            <span style="font-size:11px;color:#888">{{ item.description|truncate(40) if item.description else '' }}</span>
+          </td>
+          <td style="font-size:12px">{{ item.category.name if item.category else '—' }}</td>
+          <td><strong style="color:#FF6B00">€{{ "%.2f"|format(item.price|float) }}</strong></td>
+          <td>{% if item.is_available %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-red">No</span>{% endif %}</td>
+          <td>{% if item.is_promoted %}<span class="badge badge-orange">★</span>{% else %}—{% endif %}</td>
+          <td style="white-space:nowrap">
+            <a href="/admin/items/{{ item.id }}/customize" class="btn btn-blue btn-sm">Customize</a>
+            <button class="btn btn-outline btn-sm" onclick="editItem({{ item.id }},{{ item.category_id or 0 }},'{{ item.name }}','{{ item.description or '' }}',{{ item.price|float }},{{ 'true' if item.is_available else 'false' }},{{ 'true' if item.is_promoted else 'false' }},{{ item.sort_order }},{{ item.calories or 0 }},'{{ item.allergens or '' }}')">Edit</button>
+            <form method="post" action="/admin/items/{{ item.id }}/delete" style="display:inline" onsubmit="return confirm('Delete?')">
+              <button class="btn btn-danger btn-sm">Del</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Add/Edit form -->
+  <div class="card" id="form-card" style="position:sticky;top:20px;align-self:start">
+    <h2 id="form-title">Add Item</h2>
+    <form method="post" enctype="multipart/form-data">
+      <input type="hidden" name="item_id" id="item_id">
+      <div class="form-group">
+        <label>Name *</label>
+        <input type="text" name="name" id="f_name" required>
+      </div>
+      <div class="form-group">
+        <label>Category</label>
+        <select name="category_id" id="f_cat">
+          <option value="">— None —</option>
+          {% for c in categories %}
+          <option value="{{ c.id }}">{{ c.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Description</label>
+        <textarea name="description" id="f_desc" rows="2" style="resize:vertical"></textarea>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Price (€) *</label>
+          <input type="number" step="0.01" name="price" id="f_price" min="0" required>
+        </div>
+        <div class="form-group">
+          <label>Sort Order</label>
+          <input type="number" name="sort_order" id="f_sort" value="0">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Calories</label>
+          <input type="number" name="calories" id="f_cal" min="0">
+        </div>
+        <div class="form-group">
+          <label>Allergens</label>
+          <input type="text" name="allergens" id="f_allerg" placeholder="nuts, gluten…">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Image</label>
+        <input type="file" name="image" accept="image/*">
+      </div>
+      <div class="form-row" style="gap:20px;margin-bottom:16px">
+        <label><input type="checkbox" name="is_available" id="f_avail" checked> Available</label>
+        <label><input type="checkbox" name="is_promoted" id="f_promo"> Promoted</label>
+      </div>
+      <button class="btn btn-primary" type="submit">💾 Save</button>
+      <button class="btn btn-outline" type="button" onclick="resetItemForm()">✕ Clear</button>
+    </form>
+  </div>
+</div>
+
+<script>
+function editItem(id,catId,name,desc,price,avail,promo,sort,cal,allerg){
+  document.getElementById('item_id').value=id;
+  document.getElementById('f_cat').value=catId||'';
+  document.getElementById('f_name').value=name;
+  document.getElementById('f_desc').value=desc;
+  document.getElementById('f_price').value=price;
+  document.getElementById('f_sort').value=sort;
+  document.getElementById('f_cal').value=cal||'';
+  document.getElementById('f_allerg').value=allerg;
+  document.getElementById('f_avail').checked=avail;
+  document.getElementById('f_promo').checked=promo;
+  document.getElementById('form-title').textContent='Edit Item';
+  document.getElementById('form-card').scrollIntoView({behavior:'smooth'});
+}
+function resetItemForm(){
+  document.querySelectorAll('#form-card input,#form-card textarea,#form-card select')
+    .forEach(el=>{ if(el.type==='checkbox') el.checked=(el.id==='f_avail'); else el.value=''; });
+  document.getElementById('form-title').textContent='Add Item';
+}
+</script>
+{% endblock %}

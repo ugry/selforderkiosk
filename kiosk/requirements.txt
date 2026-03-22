@@ -1,0 +1,15 @@
+# PyQt5 and Pillow are NOT installed via pip here.
+# The venv is created with --system-site-packages so it inherits both from apt:
+#   python3-pyqt5   (QtWidgets, QtCore, QtGui …)
+#   python3-pil     (PIL / Pillow)
+#
+# Installing Pillow via pip on a fresh Debian system fails with:
+#   "Failed to build pillow" because libjpeg-dev / zlib1g-dev etc. are missing.
+# install.sh handles all of that; run it once before starting the venv.
+#
+# If you are setting up manually WITHOUT install.sh, first run:
+#   sudo apt-get install python3-pyqt5 python3-pil \
+#       libjpeg-dev zlib1g-dev libpng-dev python3-dev build-essential
+# Then create the venv with:
+#   python3 -m venv --system-site-packages .venv
+requests==2.31.0

@@ -1,0 +1,57 @@
+{% extends "admin/base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+{% set active = 'dashboard' %}
+{% block content %}
+<div class="stats">
+  <div class="stat">
+    <div class="val">{{ today_count }}</div>
+    <div class="lbl">Orders Today</div>
+  </div>
+  <div class="stat">
+    <div class="val">€{{ "%.2f"|format(today_revenue) }}</div>
+    <div class="lbl">Revenue Today</div>
+  </div>
+  <div class="stat">
+    <div class="val">{{ total_orders }}</div>
+    <div class="lbl">Total Orders</div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Recent Orders</h2>
+  <table>
+    <thead>
+      <tr><th>#</th><th>Queue</th><th>Status</th><th>Total</th><th>Payment</th><th>Time</th><th>Action</th></tr>
+    </thead>
+    <tbody>
+      {% for o in recent_orders %}
+      <tr>
+        <td style="font-size:11px;color:#aaa">{{ o.id|string|truncate(8,True,'') }}</td>
+        <td><strong>#{{ "%04d"|format(o.queue_number) }}</strong></td>
+        <td>
+          {% if o.status == 'completed' %}<span class="badge badge-green">{{ o.status }}</span>
+          {% elif o.status == 'preparing' %}<span class="badge badge-orange">{{ o.status }}</span>
+          {% elif o.status == 'cancelled' %}<span class="badge badge-red">{{ o.status }}</span>
+          {% elif o.status == 'ready' %}<span class="badge badge-blue">{{ o.status }}</span>
+          {% else %}<span class="badge badge-gray">{{ o.status }}</span>{% endif %}
+        </td>
+        <td><strong>€{{ "%.2f"|format(o.total_amount|float) }}</strong></td>
+        <td>{{ o.payment_method or '—' }}</td>
+        <td style="font-size:12px;color:#888">{{ o.created_at.strftime('%H:%M') if o.created_at else '' }}</td>
+        <td>
+          <form method="post" action="/admin/orders/{{ o.id }}/status" style="display:inline">
+            <select name="status" style="font-size:12px;padding:3px 6px;border-radius:4px">
+              {% for st in ['pending','confirmed','preparing','ready','completed','cancelled'] %}
+              <option value="{{ st }}" {% if st==o.status %}selected{% endif %}>{{ st }}</option>
+              {% endfor %}
+            </select>
+            <button class="btn btn-primary btn-sm" type="submit">✓</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

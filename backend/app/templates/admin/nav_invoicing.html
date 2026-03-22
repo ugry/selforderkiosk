@@ -1,0 +1,364 @@
+{% extends "admin/base.html" %}
+{% block title %}NAV Invoicing{% endblock %}
+{% block page_title %}NAV Online Számla — Hungarian Tax Invoicing{% endblock %}
+{% set active = 'nav' %}
+
+{% block extra_head %}
+<style>
+  .nav-status-badge { display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:bold }
+  .nav-submitted  { background:#dbeafe;color:#1e40af }
+  .nav-done       { background:#d1fae5;color:#065f46 }
+  .nav-error      { background:#fee2e2;color:#991b1b }
+  .nav-aborted    { background:#fef3c7;color:#92400e }
+  .nav-pending    { background:#f3f4f6;color:#374151 }
+  .env-badge { font-size:11px;font-weight:700;padding:3px 10px;border-radius:10px }
+  .env-test { background:#fef3c7;color:#92400e }
+  .env-prod { background:#d1fae5;color:#065f46 }
+  .section-heading { font-size:12px;font-weight:700;color:#FF6B00;text-transform:uppercase;letter-spacing:1px;margin:18px 0 10px;padding-bottom:5px;border-bottom:2px solid #FF6B00 }
+  .cred-field input { font-family:monospace }
+  .info-panel { background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:14px 18px;font-size:13px;color:#1e3a5f;margin-bottom:20px }
+  .info-panel a { color:#1d4ed8 }
+  .xml-preview { font-family:monospace;font-size:11px;background:#1e1e1e;color:#d4d4d4;padding:12px;border-radius:6px;overflow:auto;max-height:300px;white-space:pre }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{% if flash %}
+<div class="flash {% if flash[0]=='success' %}success{% else %}error{% endif %}">
+  {{ flash[1] }}
+</div>
+{% endif %}
+
+<div class="info-panel">
+  <strong>NAV Online Számla</strong> (Online Invoice System) is the Hungarian tax authority's
+  mandatory e-invoicing reporting system. Every VAT invoice issued in Hungary must be reported
+  in real time (or within 4 days for paper invoices). This integration reports completed orders
+  as B2C paper invoices. <br>
+  <br>
+  📖 Documentation: <a href="https://onlineszamla.nav.gov.hu/dokumentaciok" target="_blank">onlineszamla.nav.gov.hu/dokumentaciok</a>
+  &nbsp;|&nbsp;
+  🧪 Register technical user: <a href="https://onlineszamla-test.nav.gov.hu" target="_blank">onlineszamla-test.nav.gov.hu</a> (test)
+  &nbsp;/&nbsp; <a href="https://onlineszamla.nav.gov.hu" target="_blank">onlineszamla.nav.gov.hu</a> (production)
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+
+  <!-- LEFT: Settings -->
+  <div>
+    <form method="post" action="/admin/nav/settings">
+
+      <div class="card">
+        <h2>Connection Settings</h2>
+
+        <div class="section-heading">Status &amp; Environment</div>
+        <div style="display:flex;gap:24px;align-items:center;margin-bottom:14px">
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:normal">
+            <input type="checkbox" name="enabled" value="1"
+                   {% if ns and ns.enabled %}checked{% endif %}>
+            <strong>Enable NAV invoicing</strong>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:normal">
+            <input type="checkbox" name="test_mode" value="1"
+                   {% if not ns or ns.test_mode %}checked{% endif %}
+                   onchange="updateEnvLabel(this)">
+            Use <strong>test</strong> environment
+          </label>
+          <span class="env-badge {% if ns and not ns.test_mode %}env-prod{% else %}env-test{% endif %}"
+                id="env_label">
+            {% if ns and not ns.test_mode %}🟢 PRODUCTION{% else %}🟡 TEST{% endif %}
+          </span>
+        </div>
+
+        <div class="section-heading">Technical User Credentials</div>
+        <p style="font-size:11px;color:#888;margin-bottom:10px">
+          Create a technical user in the NAV Online Számla portal under
+          <em>Felhasználókezelés → Technikai felhasználók</em>.
+        </p>
+
+        <div class="form-row cred-field">
+          <div class="form-group">
+            <label>Login (bejelentkezési név)</label>
+            <input type="text" name="nav_login" value="{{ ns.nav_login or '' }}"
+                   placeholder="technical_user_login" autocomplete="off">
+          </div>
+          <div class="form-group">
+            <label>Password
+              <span style="font-weight:normal;color:#888">(leave blank to keep)</span>
+            </label>
+            <input type="password" name="nav_password"
+                   placeholder="{% if ns and ns.nav_password_hash %}••••••••  (set){% else %}Enter password{% endif %}"
+                   autocomplete="new-password">
+          </div>
+        </div>
+
+        <div class="form-row cred-field">
+          <div class="form-group">
+            <label>Tax Number (adószám — first 8 digits)</label>
+            <input type="text" name="nav_tax_number"
+                   value="{{ ns.nav_tax_number or '' }}"
+                   placeholder="12345678" maxlength="8">
+          </div>
+          <div class="form-group">
+            <label>Signature Key (aláírási kulcs)
+              <span style="font-weight:normal;color:#888">(leave blank to keep)</span>
+            </label>
+            <input type="password" name="nav_sig_key"
+                   placeholder="{% if ns and ns.nav_sig_key %}••••••••  (set){% else %}Enter signature key{% endif %}"
+                   autocomplete="new-password">
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Supplier (Restaurant) Details</h2>
+        <p style="font-size:11px;color:#888;margin-bottom:10px">
+          These appear on every invoice submitted to NAV as the issuing party.
+        </p>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>Company / Restaurant Name</label>
+            <input type="text" name="supplier_name" value="{{ ns.supplier_name or '' }}"
+                   placeholder="My Restaurant Kft.">
+          </div>
+          <div class="form-group">
+            <label>Full Tax Number (teljes adószám)
+              <span style="font-weight:normal;color:#888">e.g. 12345678-1-23</span>
+            </label>
+            <input type="text" name="supplier_tax_number"
+                   value="{{ ns.supplier_tax_number or '' }}"
+                   placeholder="12345678-1-23">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group" style="max-width:80px">
+            <label>Country</label>
+            <input type="text" name="supplier_country"
+                   value="{{ ns.supplier_country or 'HU' }}" maxlength="2">
+          </div>
+          <div class="form-group" style="max-width:100px">
+            <label>Postal Code</label>
+            <input type="text" name="supplier_postal_code"
+                   value="{{ ns.supplier_postal_code or '' }}" placeholder="1234">
+          </div>
+          <div class="form-group">
+            <label>City</label>
+            <input type="text" name="supplier_city"
+                   value="{{ ns.supplier_city or '' }}" placeholder="Budapest">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Street Address (utca, szám)</label>
+          <input type="text" name="supplier_address_detail"
+                 value="{{ ns.supplier_address_detail or '' }}"
+                 placeholder="Kossuth Lajos utca 1.">
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Invoice Numbering</h2>
+        <div class="form-row">
+          <div class="form-group" style="max-width:140px">
+            <label>Prefix</label>
+            <input type="text" name="invoice_prefix"
+                   value="{{ ns.invoice_prefix or 'INV' }}" maxlength="20"
+                   placeholder="INV">
+            <span style="font-size:11px;color:#888;margin-top:3px">
+              Result: <strong>{{ ns.invoice_prefix or 'INV' }}/2025/000001</strong>
+            </span>
+          </div>
+          <div class="form-group" style="flex:0;min-width:0;padding-top:20px">
+            <span style="font-size:13px;color:#888">
+              Current sequence: <strong>{{ ns.invoice_seq or 0 }}</strong>
+              (year {{ ns.invoice_year or '—' }})
+            </span>
+          </div>
+        </div>
+
+        <div style="margin-top:6px">
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:normal">
+            <input type="checkbox" name="auto_submit" value="1"
+                   {% if ns and ns.auto_submit %}checked{% endif %}>
+            <strong>Auto-submit invoice when order is marked as Completed</strong>
+          </label>
+          <span style="font-size:11px;color:#888;margin-left:22px">
+            When enabled, every order set to "completed" status is automatically
+            submitted to NAV. Disable to submit manually.
+          </span>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-primary" type="submit">💾 Save Settings</button>
+      </div>
+    </form>
+
+    <br>
+    <form method="post" action="/admin/nav/test-connection">
+      <button class="btn btn-blue">🔌 Test Connection to NAV</button>
+    </form>
+  </div>
+
+  <!-- RIGHT: Submission history -->
+  <div>
+    <div class="card">
+      <h2>Invoice Submissions
+        <span style="font-size:12px;font-weight:normal;color:#888">(latest 100)</span>
+      </h2>
+
+      {% if submissions %}
+      <table>
+        <thead>
+          <tr>
+            <th>Invoice #</th>
+            <th>Order</th>
+            <th>Status</th>
+            <th>Transaction ID</th>
+            <th>Date</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for sub in submissions %}
+          <tr>
+            <td style="font-family:monospace;font-size:12px">{{ sub.invoice_number }}</td>
+            <td>
+              {% if sub.order_id and order_map.get(sub.order_id|string) %}
+              <a href="/admin/orders">#{{ "%04d"|format(order_map[sub.order_id|string]) }}</a>
+              {% else %}—{% endif %}
+            </td>
+            <td>
+              {% if sub.status == 'done' %}
+                <span class="nav-status-badge nav-done">✓ DONE</span>
+              {% elif sub.status == 'submitted' %}
+                <span class="nav-status-badge nav-submitted">⏳ Submitted</span>
+              {% elif sub.status == 'error' %}
+                <span class="nav-status-badge nav-error" title="{{ sub.error_message or '' }}">✗ Error</span>
+              {% elif sub.status == 'aborted' %}
+                <span class="nav-status-badge nav-aborted">⚠ Aborted</span>
+              {% else %}
+                <span class="nav-status-badge nav-pending">◌ Pending</span>
+              {% endif %}
+            </td>
+            <td style="font-family:monospace;font-size:11px;max-width:120px;overflow:hidden;text-overflow:ellipsis">
+              {{ sub.transaction_id or '—' }}
+            </td>
+            <td style="font-size:11px;color:#888">
+              {{ sub.submitted_at.strftime('%d/%m %H:%M') if sub.submitted_at else '' }}
+            </td>
+            <td>
+              <div style="display:flex;gap:4px;flex-wrap:wrap">
+                {% if sub.transaction_id and sub.status not in ('done',) %}
+                <form method="post" action="/admin/nav/refresh/{{ sub.id }}" style="margin:0">
+                  <button class="btn btn-outline btn-sm" title="Refresh status from NAV">↻</button>
+                </form>
+                {% endif %}
+                {% if sub.invoice_xml %}
+                <button class="btn btn-outline btn-sm"
+                        onclick="showXml('xml-{{ sub.id }}')" title="View invoice XML">📄</button>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% if sub.status == 'error' and sub.error_message %}
+          <tr>
+            <td colspan="6" style="font-size:11px;color:#991b1b;padding:4px 12px;background:#fff5f5">
+              {{ sub.error_message[:300] }}
+            </td>
+          </tr>
+          {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p style="color:#888;font-size:13px">No invoice submissions yet.</p>
+      {% endif %}
+    </div>
+
+    {% if submissions %}
+    <!-- Hidden XML blocks -->
+    {% for sub in submissions %}
+    {% if sub.invoice_xml %}
+    <div id="xml-{{ sub.id }}" style="display:none;margin-bottom:12px">
+      <div class="card" style="margin-bottom:0">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <strong style="font-size:13px">{{ sub.invoice_number }} — Invoice XML</strong>
+          <button class="btn btn-outline btn-sm" onclick="this.closest('[id]').style.display='none'">✕ Close</button>
+        </div>
+        <div class="xml-preview">{{ sub.invoice_xml | e }}</div>
+      </div>
+    </div>
+    {% endif %}
+    {% endfor %}
+    {% endif %}
+  </div>
+</div>
+
+<!-- Submit invoice for a specific order -->
+<div class="card" style="margin-top:10px">
+  <h2>Submit Invoice for Order</h2>
+  <p style="font-size:13px;color:#666;margin-bottom:12px">
+    Enter an order queue number to submit its invoice to NAV manually.
+    Use this if auto-submit is off or if a previous submission failed.
+  </p>
+  <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+    <div class="form-group" style="max-width:200px">
+      <label>Queue Number (e.g. 42)</label>
+      <input type="number" id="submit_queue" min="1" placeholder="42">
+    </div>
+    <button class="btn btn-primary btn-sm" style="margin-bottom:1px"
+            onclick="submitByQueue()">📤 Submit to NAV</button>
+  </div>
+  <div id="submit_result" style="margin-top:10px;font-size:13px;display:none"></div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function updateEnvLabel(chk) {
+  var lbl = document.getElementById('env_label');
+  if (chk.checked) {
+    lbl.textContent = '🟡 TEST';
+    lbl.className = 'env-badge env-test';
+  } else {
+    lbl.textContent = '🟢 PRODUCTION';
+    lbl.className = 'env-badge env-prod';
+  }
+}
+
+function showXml(elId) {
+  var el = document.getElementById(elId);
+  if (el) { el.style.display = el.style.display === 'none' ? 'block' : 'none'; }
+}
+
+function submitByQueue() {
+  var q  = document.getElementById('submit_queue').value;
+  var res = document.getElementById('submit_result');
+  if (!q) { return; }
+  res.style.display = 'block';
+  res.innerHTML = '<span style="color:#888">Looking up order…</span>';
+  fetch('/admin/api/orders')
+    .then(function(r){ return r.json(); })
+    .then(function(orders){
+      var match = orders.find(function(o){ return o.queue_number == parseInt(q); });
+      if (!match) {
+        res.innerHTML = '<span style="color:var(--red)">Order #' + q + ' not found.</span>';
+        return;
+      }
+      // POST to submit endpoint — need a form submit
+      var form = document.createElement('form');
+      form.method = 'POST';
+      form.action = '/admin/nav/submit/' + match.id;
+      document.body.appendChild(form);
+      form.submit();
+    })
+    .catch(function(e){
+      res.innerHTML = '<span style="color:var(--red)">Error: ' + e + '</span>';
+    });
+}
+</script>
+{% endblock %}

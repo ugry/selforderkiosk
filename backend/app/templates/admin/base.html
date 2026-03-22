@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{% block title %}Admin{% endblock %} — Kiosk Manager</title>
+<style>
+  :root {
+    --primary:#FF6B00; --dark:#1a1a1a; --sidebar:#111;
+    --bg:#f4f4f4; --card:#fff; --border:#ddd;
+    --green:#2ecc71; --red:#e74c3c; --blue:#3498db;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Arial,sans-serif;background:var(--bg);color:#222;display:flex;min-height:100vh}
+
+  /* Sidebar */
+  nav.sidebar{width:220px;background:var(--sidebar);color:#fff;flex-shrink:0;display:flex;flex-direction:column}
+  nav.sidebar .logo{padding:20px;font-size:20px;font-weight:bold;color:var(--primary);border-bottom:1px solid #333;letter-spacing:2px}
+  nav.sidebar a{display:block;padding:13px 20px;color:#ccc;text-decoration:none;font-size:14px;border-left:3px solid transparent;transition:.2s}
+  nav.sidebar a:hover,nav.sidebar a.active{color:#fff;background:#1e1e1e;border-left-color:var(--primary)}
+  nav.sidebar .nav-section{padding:10px 20px 4px;font-size:11px;color:#555;text-transform:uppercase;letter-spacing:1px;margin-top:10px}
+
+  /* Main */
+  main{flex:1;display:flex;flex-direction:column;min-width:0}
+  header.topbar{background:var(--card);padding:14px 28px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);box-shadow:0 1px 4px rgba(0,0,0,.06)}
+  header.topbar h1{font-size:18px;font-weight:600}
+  header.topbar a.logout{color:var(--red);text-decoration:none;font-size:13px}
+  .content{padding:28px;flex:1;overflow-y:auto}
+
+  /* Cards */
+  .card{background:var(--card);border-radius:8px;padding:22px;box-shadow:0 1px 4px rgba(0,0,0,.07);margin-bottom:20px}
+  .card h2{font-size:15px;margin-bottom:16px;color:#444;font-weight:600;padding-bottom:10px;border-bottom:1px solid var(--border)}
+
+  /* Stat boxes */
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:24px}
+  .stat{background:var(--card);border-radius:8px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.07);border-top:4px solid var(--primary)}
+  .stat .val{font-size:32px;font-weight:bold;color:var(--primary)}
+  .stat .lbl{font-size:12px;color:#888;margin-top:4px}
+
+  /* Table */
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th{background:#f8f8f8;padding:10px 12px;text-align:left;color:#555;font-weight:600;border-bottom:2px solid var(--border)}
+  td{padding:9px 12px;border-bottom:1px solid #eee;vertical-align:middle}
+  tr:hover td{background:#fafafa}
+
+  /* Forms */
+  .form-row{display:flex;flex-wrap:wrap;gap:14px;margin-bottom:14px}
+  .form-group{display:flex;flex-direction:column;gap:5px;flex:1;min-width:160px}
+  label{font-size:12px;font-weight:600;color:#555}
+  input,select,textarea{padding:9px 12px;border:1px solid var(--border);border-radius:6px;font-size:14px;width:100%;font-family:inherit}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)}
+
+  /* Buttons */
+  .btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;text-decoration:none;transition:.15s}
+  .btn-primary{background:var(--primary);color:#fff}
+  .btn-primary:hover{background:#cc5500}
+  .btn-danger{background:var(--red);color:#fff}
+  .btn-danger:hover{background:#c0392b}
+  .btn-sm{padding:5px 10px;font-size:12px}
+  .btn-outline{background:transparent;border:1px solid var(--border);color:#444}
+  .btn-outline:hover{background:#f0f0f0}
+  .btn-blue{background:var(--blue);color:#fff}
+
+  /* Badges */
+  .badge{display:inline-block;padding:3px 8px;border-radius:12px;font-size:11px;font-weight:bold}
+  .badge-green{background:#d5f5e3;color:#1e8449}
+  .badge-orange{background:#fdebd0;color:#ca6f1e}
+  .badge-red{background:#fadbd8;color:#c0392b}
+  .badge-blue{background:#d6eaf8;color:#1a5276}
+  .badge-gray{background:#eee;color:#666}
+
+  /* Color swatch */
+  .swatch{width:30px;height:30px;border-radius:4px;display:inline-block;border:1px solid #ccc;vertical-align:middle}
+
+  /* Flash */
+  .flash{padding:12px 18px;border-radius:6px;margin-bottom:16px;font-size:14px}
+  .flash.error{background:#fadbd8;color:#c0392b}
+  .flash.success{background:#d5f5e3;color:#1e8449}
+
+  /* Checkbox */
+  input[type=checkbox]{width:auto}
+</style>
+{% block extra_head %}{% endblock %}
+</head>
+<body>
+<nav class="sidebar">
+  <div class="logo">🍽 KIOSK ADMIN</div>
+  <span class="nav-section">Overview</span>
+  <a href="/admin/" {% if active=='dashboard' %}class="active"{% endif %}>📊 Dashboard</a>
+  <a href="/admin/orders" {% if active=='orders' %}class="active"{% endif %}>🧾 Orders</a>
+  <a href="/admin/reports" {% if active=='reports' %}class="active"{% endif %}>📈 Reports</a>
+  <span class="nav-section">Menu</span>
+  <a href="/admin/categories" {% if active=='categories' %}class="active"{% endif %}>📂 Categories</a>
+  <a href="/admin/items" {% if active=='items' %}class="active"{% endif %}>🍔 Items</a>
+  <span class="nav-section">System</span>
+  <a href="/admin/machines"     {% if active=='machines'     %}class="active"{% endif %}>🖥 Machines</a>
+  <a href="/admin/integrations" {% if active=='integrations' %}class="active"{% endif %}>🔗 Integrations</a>
+  <a href="/admin/nav"          {% if active=='nav'          %}class="active"{% endif %}>🧾 NAV Invoicing</a>
+  <a href="/admin/settings"     {% if active=='settings'     %}class="active"{% endif %}>⚙️ Settings</a>
+  <a href="/docs" target="_blank">📖 API Docs</a>
+</nav>
+<main>
+  <header class="topbar">
+    <h1>{% block page_title %}Dashboard{% endblock %}</h1>
+    <a href="/admin/logout" class="logout">⏻ Logout</a>
+  </header>
+  <div class="content">
+    {% block content %}{% endblock %}
+  </div>
+</main>
+{% block scripts %}{% endblock %}
+</body>
+</html>

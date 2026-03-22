@@ -1,0 +1,69 @@
+{% extends "admin/base.html" %}
+{% block title %}Orders{% endblock %}
+{% block page_title %}All Orders{% endblock %}
+{% set active = 'orders' %}
+{% block content %}
+<div class="card">
+  <h2>Orders (latest 100)</h2>
+  <table>
+    <thead>
+      <tr><th>#</th><th>Source</th><th>Items</th><th>Subtotal</th><th>Tax</th><th>Total</th><th>Payment</th><th>Status</th><th>Time</th><th>Action</th></tr>
+    </thead>
+    <tbody>
+      {% for o in orders %}
+      <tr>
+        <td><strong>#{{ "%04d"|format(o.queue_number) }}</strong></td>
+        <td>
+          {% set src = o.source or 'kiosk' %}
+          {% if src == 'kiosk' %}
+            <span class="badge badge-gray">🖥 Kiosk</span>
+          {% elif src == 'wolt' %}
+            <span class="badge" style="background:#dbeafe;color:#1e40af">🟦 Wolt</span>
+          {% elif src == 'foodpanda' %}
+            <span class="badge" style="background:#fce7e7;color:#b91c1c">🟥 Panda</span>
+          {% elif src == 'ubereats' %}
+            <span class="badge" style="background:#e5e5e5;color:#111">⬛ Uber</span>
+          {% elif src == 'justeat' %}
+            <span class="badge" style="background:#fff3e0;color:#c2410c">🟧 JustEat</span>
+          {% else %}
+            <span class="badge badge-blue">🔗 {{ src|capitalize }}</span>
+          {% endif %}
+          {% if o.customer_name %}
+          <div style="font-size:11px;color:#888;margin-top:2px">{{ o.customer_name }}</div>
+          {% endif %}
+        </td>
+        <td style="font-size:12px;max-width:220px">
+          {% for line in o.lines %}
+          {{ line.quantity }}× {{ line.name }}{% if not loop.last %},{% endif %}
+          {% endfor %}
+        </td>
+        <td>€{{ "%.2f"|format(o.subtotal|float) }}</td>
+        <td>€{{ "%.2f"|format(o.tax_amount|float) }}</td>
+        <td><strong>€{{ "%.2f"|format(o.total_amount|float) }}</strong></td>
+        <td style="font-size:12px">{{ o.payment_method or '—' }}</td>
+        <td>
+          {% if o.status == 'completed' %}<span class="badge badge-green">{{ o.status }}</span>
+          {% elif o.status == 'preparing' %}<span class="badge badge-orange">{{ o.status }}</span>
+          {% elif o.status == 'cancelled' %}<span class="badge badge-red">{{ o.status }}</span>
+          {% elif o.status == 'ready' %}<span class="badge badge-blue">{{ o.status }}</span>
+          {% else %}<span class="badge badge-gray">{{ o.status }}</span>{% endif %}
+        </td>
+        <td style="font-size:11px;color:#888">
+          {{ o.created_at.strftime('%d/%m %H:%M') if o.created_at else '' }}
+        </td>
+        <td>
+          <form method="post" action="/admin/orders/{{ o.id }}/status" style="display:flex;gap:4px">
+            <select name="status" style="font-size:12px;padding:3px 5px;border-radius:4px">
+              {% for st in ['pending','confirmed','preparing','ready','completed','cancelled'] %}
+              <option value="{{ st }}" {% if st==o.status %}selected{% endif %}>{{ st }}</option>
+              {% endfor %}
+            </select>
+            <button class="btn btn-primary btn-sm">✓</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

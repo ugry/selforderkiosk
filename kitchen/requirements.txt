@@ -1,0 +1,6 @@
+# PyQt5 is NOT installed via pip here.
+# The venv is created with --system-site-packages so it inherits
+# the system package: python3-pyqt5 (installed by install_kitchen.sh via apt).
+# If you need to run WITHOUT running install_kitchen.sh first, do:
+#   pip install PyQt5
+requests==2.31.0

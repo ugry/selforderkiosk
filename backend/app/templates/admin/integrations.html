@@ -1,0 +1,234 @@
+{% extends "admin/base.html" %}
+{% block title %}Delivery Integrations{% endblock %}
+{% block page_title %}Delivery Platform Integrations{% endblock %}
+{% set active = 'integrations' %}
+
+{% block extra_head %}
+<style>
+  .platform-card { border-left: 4px solid #ddd; margin-bottom: 18px; }
+  .platform-card.enabled { border-left-color: var(--green); }
+  .platform-card .platform-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .platform-title { display: flex; align-items: center; gap: 12px; font-size: 16px; font-weight: 700; }
+  .platform-logo { font-size: 28px; }
+  .toggle-row { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .toggle-switch {
+    position: relative; display: inline-block; width: 44px; height: 24px;
+  }
+  .toggle-switch input { opacity: 0; width: 0; height: 0; }
+  .toggle-slider {
+    position: absolute; cursor: pointer; inset: 0;
+    background: #ccc; border-radius: 24px; transition: .3s;
+  }
+  .toggle-slider:before {
+    content: ""; position: absolute; height: 18px; width: 18px; left: 3px; bottom: 3px;
+    background: #fff; border-radius: 50%; transition: .3s;
+  }
+  input:checked + .toggle-slider { background: var(--green); }
+  input:checked + .toggle-slider:before { transform: translateX(20px); }
+  .webhook-url {
+    background: #f4f4f4; border: 1px solid #ddd; border-radius: 6px;
+    padding: 8px 12px; font-family: monospace; font-size: 13px;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    margin-bottom: 14px; word-break: break-all;
+  }
+  .copy-btn { flex-shrink: 0; }
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 10px; }
+  .hint { font-size: 11px; color: #888; margin-top: 3px; }
+  .section-sep { border: none; border-top: 1px solid #eee; margin: 16px 0; }
+  .platform-icon { width: 32px; height: 32px; border-radius: 6px; object-fit: contain; }
+  .info-box {
+    background: #e8f4fd; border: 1px solid #bee3f8; border-radius: 6px;
+    padding: 12px 16px; font-size: 13px; color: #1a5276; margin-bottom: 20px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="info-box">
+  <strong>How it works:</strong> Each enabled platform sends orders to your webhook URL when a customer places an order. Copy the webhook URL and register it in the platform's merchant portal. If you set a Webhook Secret, all incoming requests will be signature-verified for security.
+</div>
+
+{% for integ in integrations %}
+{% set is_enabled = integ.enabled %}
+<div class="card platform-card {% if is_enabled %}enabled{% endif %}" id="card-{{ integ.platform }}">
+  <div class="platform-header">
+    <div class="platform-title">
+      <span class="platform-logo">
+        {% if integ.platform == 'wolt' %}🟦
+        {% elif integ.platform == 'foodpanda' %}🟥
+        {% elif integ.platform == 'ubereats' %}⬛
+        {% elif integ.platform == 'justeat' %}🟧
+        {% else %}🔗{% endif %}
+      </span>
+      {{ integ.display_name or integ.platform|capitalize }}
+    </div>
+    <span class="badge {% if is_enabled %}badge-green{% else %}badge-gray{% endif %}">
+      {% if is_enabled %}● Active{% else %}○ Disabled{% endif %}
+    </span>
+  </div>
+
+  {# Webhook URL #}
+  <label style="font-size:12px;font-weight:600;color:#555;display:block;margin-bottom:6px">
+    Webhook URL (register this in the platform portal)
+  </label>
+  <div class="webhook-url">
+    <span id="wurl-{{ integ.platform }}">{{ base_url }}/webhooks/{{ integ.platform }}</span>
+    <button class="btn btn-outline btn-sm copy-btn"
+            onclick="copyUrl('wurl-{{ integ.platform }}', this)">📋 Copy</button>
+  </div>
+
+  <form method="post" action="/admin/integrations/{{ integ.platform }}">
+    <div class="toggle-row">
+      <label class="toggle-switch">
+        <input type="checkbox" name="enabled" value="1"
+               {% if is_enabled %}checked{% endif %}
+               onchange="this.form.submit()">
+        <span class="toggle-slider"></span>
+      </label>
+      <span style="font-size:13px;font-weight:600">
+        {% if is_enabled %}Integration enabled{% else %}Integration disabled{% endif %}
+      </span>
+    </div>
+
+    <hr class="section-sep">
+
+    <div class="field-row">
+      <div class="form-group">
+        <label>Webhook Secret
+          <span style="font-weight:normal;color:#888">(leave blank to skip verification)</span>
+        </label>
+        <input type="password" name="webhook_secret"
+               placeholder="{% if integ.webhook_secret %}••••••••  (set — leave blank to keep){% else %}Enter HMAC secret{% endif %}">
+        <span class="hint">
+          {% if integ.platform == 'wolt' %}Found in Wolt Merchant Portal → Webhooks
+          {% elif integ.platform == 'foodpanda' %}Found in Foodpanda Merchant Portal → API
+          {% elif integ.platform == 'ubereats' %}Found in Uber Eats Restaurant Manager → Webhooks
+          {% elif integ.platform == 'justeat' %}Found in Just Eat Partner Centre → Integrations
+          {% else %}Any shared secret string — include it as X-Webhook-Signature header{% endif %}
+        </span>
+      </div>
+      <div class="form-group">
+        <label>Shop / Venue ID <span style="font-weight:normal;color:#888">(optional)</span></label>
+        <input type="text" name="shop_id" value="{{ integ.shop_id or '' }}"
+               placeholder="Your restaurant ID on the platform">
+        <span class="hint">Used for future outbound API calls (e.g. menu sync)</span>
+      </div>
+    </div>
+
+    {% if integ.platform in ('generic',) %}
+    <div class="field-row">
+      <div class="form-group">
+        <label>API Key <span style="font-weight:normal;color:#888">(optional)</span></label>
+        <input type="text" name="api_key" value="{{ integ.api_key or '' }}"
+               placeholder="If the sending system requires an API key">
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="form-group" style="margin-bottom:14px">
+      <label>Notes <span style="font-weight:normal;color:#888">(internal)</span></label>
+      <input type="text" name="notes" value="{{ integ.notes or '' }}"
+             placeholder="e.g. Account manager: John  /  Contract ends 2026-12">
+    </div>
+
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary btn-sm" type="submit">💾 Save</button>
+      {% if integ.webhook_secret %}
+      <button class="btn btn-outline btn-sm" type="submit" name="clear_secret" value="1"
+              onclick="return confirm('Clear the saved webhook secret?')">
+        🗑 Clear Secret
+      </button>
+      {% endif %}
+    </div>
+  </form>
+</div>
+{% endfor %}
+
+{# Test webhook section #}
+<div class="card">
+  <h2>Test Webhook</h2>
+  <p style="font-size:13px;color:#666;margin-bottom:14px">
+    Send a test order via the Generic webhook to verify your setup.
+    The Generic integration must be enabled with no secret, or you must provide the secret below.
+  </p>
+  <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+    <div class="form-group" style="min-width:220px">
+      <label>Customer Name</label>
+      <input type="text" id="test_customer" value="Test Customer">
+    </div>
+    <div class="form-group" style="min-width:180px">
+      <label>Item Name</label>
+      <input type="text" id="test_item" value="Test Burger">
+    </div>
+    <div class="form-group" style="min-width:80px">
+      <label>Price</label>
+      <input type="number" id="test_price" value="9.90" step="0.01">
+    </div>
+    <button class="btn btn-blue btn-sm" onclick="sendTestWebhook()" style="margin-bottom:1px">
+      ▶ Send Test Order
+    </button>
+  </div>
+  <div id="test_result" style="margin-top:10px;font-size:13px;display:none"></div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function copyUrl(elId, btn) {
+  var text = document.getElementById(elId).textContent;
+  var prev = btn.textContent;
+  function done() { btn.textContent = '✓ Copied'; setTimeout(function(){ btn.textContent = prev; }, 2000); }
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(done).catch(function() { _fallback(text, done); });
+  } else { _fallback(text, done); }
+}
+function _fallback(text, done) {
+  var ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.cssText = 'position:fixed;opacity:0;top:0;left:0';
+  document.body.appendChild(ta); ta.focus(); ta.select();
+  try { document.execCommand('copy'); } catch(e) {}
+  document.body.removeChild(ta); done();
+}
+
+function sendTestWebhook() {
+  var payload = {
+    order_id:      'test-' + Date.now(),
+    customer_name: document.getElementById('test_customer').value,
+    items: [{
+      name:       document.getElementById('test_item').value,
+      quantity:   1,
+      unit_price: parseFloat(document.getElementById('test_price').value)
+    }],
+    payment_method: 'online',
+    notes: 'Test order from admin panel'
+  };
+  var res = document.getElementById('test_result');
+  res.style.display = 'block';
+  res.innerHTML = '<span style="color:#888">Sending…</span>';
+  fetch('/webhooks/generic', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload)
+  })
+  .then(function(r){ return r.json().then(function(d){ return {status: r.status, data: d}; }); })
+  .then(function(r){
+    if (r.data.status === 'ok') {
+      res.innerHTML = '<span style="color:var(--green)">✓ Order created — Queue #' + r.data.queue_number + '</span>';
+    } else if (r.data.status === 'ignored') {
+      res.innerHTML = '<span style="color:#ca6f1e">⚠ Platform is disabled. Enable the Generic integration first.</span>';
+    } else {
+      res.innerHTML = '<span style="color:var(--red)">✗ Response: ' + JSON.stringify(r.data) + ' (HTTP ' + r.status + ')</span>';
+    }
+  })
+  .catch(function(e){
+    res.innerHTML = '<span style="color:var(--red)">✗ Error: ' + e + '</span>';
+  });
+}
+</script>
+{% endblock %}
