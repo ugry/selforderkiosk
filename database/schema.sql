@@ -30,6 +30,7 @@ CREATE TABLE settings (
     idle_timeout_sec    INT          DEFAULT 120,
     show_promotions     BOOLEAN      DEFAULT TRUE,
     kiosk_language      VARCHAR(5)   DEFAULT 'en',
+    waiting_video_url   VARCHAR(500),
     updated_at          TIMESTAMPTZ  DEFAULT NOW()
 );
 INSERT INTO settings DEFAULT VALUES;

@@ -46,12 +46,16 @@ apt-get update -qq 2>&1 | tee -a "$LOG"
 PKGS=(
     python3 python3-pip python3-venv
     python3-pyqt5
+    python3-pyqt5.qtmultimedia
     python3-pil libjpeg-dev zlib1g-dev libpng-dev
     libfreetype6-dev python3-dev build-essential libffi-dev
     xorg openbox xinit unclutter fonts-liberation
     libxcb-xinerama0 libxcb-icccm4 libxcb-image0
     libxcb-keysyms1 libxcb-randr0 libxcb-render-util0
     libxcb-xkb1 libxkbcommon-x11-0 libxcb-cursor0
+    gstreamer1.0-plugins-base gstreamer1.0-plugins-good
+    gstreamer1.0-plugins-ugly gstreamer1.0-libav
+    gstreamer1.0-tools
 )
 
 # libgl1 name changed in Debian 12+

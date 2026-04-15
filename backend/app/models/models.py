@@ -34,6 +34,7 @@ class Setting(Base):
     idle_timeout_sec  = Column(Integer, default=120)
     show_promotions   = Column(Boolean, default=True)
     kiosk_language    = Column(String(5), default="en")
+    waiting_video_url = Column(String(500))
     updated_at        = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
 
 

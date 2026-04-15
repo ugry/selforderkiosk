@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     UPLOAD_DIR:      str = "app/static/uploads"
     HOST:            str = "0.0.0.0"
     PORT:            int = 8000
+    REDIS_URL:       str = "redis://localhost:6379/0"
+    INSTANCE_ID:     str = "backend-1"
 
     class Config:
         env_file = ".env"

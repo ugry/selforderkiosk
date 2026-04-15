@@ -322,6 +322,7 @@ async def save_settings(
     kiosk_language:    str   = Form("en"),
     logo: Optional[UploadFile] = File(None),
     banner: Optional[UploadFile] = File(None),
+    waiting_video: Optional[UploadFile] = File(None),
     db: AsyncSession = Depends(get_db),
 ):
     require_admin(request)
@@ -342,8 +343,9 @@ async def save_settings(
             return f"/static/uploads/{fname}"
         return None
 
-    logo_url   = await save_file(logo, "logo")
-    banner_url = await save_file(banner, "banner")
+    logo_url        = await save_file(logo, "logo")
+    banner_url      = await save_file(banner, "banner")
+    waiting_video_url = await save_file(waiting_video, "waiting_video")
 
     s.restaurant_name    = restaurant_name
     s.primary_color      = primary_color
@@ -365,8 +367,9 @@ async def save_settings(
     s.printer_kitchen_port = printer_kitchen_port
     s.idle_timeout_sec   = idle_timeout_sec
     s.kiosk_language     = kiosk_language
-    if logo_url:   s.logo_url   = logo_url
-    if banner_url: s.banner_url = banner_url
+    if logo_url:           s.logo_url           = logo_url
+    if banner_url:         s.banner_url         = banner_url
+    if waiting_video_url:  s.waiting_video_url  = waiting_video_url
 
     return RedirectResponse("/admin/settings", status_code=302)
 

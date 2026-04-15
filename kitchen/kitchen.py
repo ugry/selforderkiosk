@@ -78,19 +78,47 @@ cfg = configparser.ConfigParser()
 cfg.read(_INI)
 log.info("Config loaded from %s", _INI)
 
-SERVER_HOST   = cfg.get("server",  "host",         fallback="localhost")
-SERVER_PORT   = cfg.get("server",  "port",         fallback="8000")
-API_KEY       = cfg.get("server",  "api_key",      fallback="")
-FULLSCREEN    = cfg.getboolean("display", "fullscreen",   fallback=True)
-REFRESH_SEC   = cfg.getint("display",    "refresh_sec",   fallback=4)
-FONT_SIZE     = cfg.getint("display",    "font_size",     fallback=22)
-COLUMNS       = cfg.getint("display",    "columns",       fallback=3)
-_statuses_raw = cfg.get("display", "show_statuses", fallback="pending,confirmed,preparing")
-SHOW_STATUSES = [s.strip() for s in _statuses_raw.split(",") if s.strip()]
+_PRIMARY_HOST   = cfg.get("server", "primary_host",   fallback="localhost")
+_PRIMARY_PORT   = cfg.get("server", "primary_port",   fallback="8080")
+_SECONDARY_HOST = cfg.get("server", "secondary_host", fallback="")
+_SECONDARY_PORT = cfg.get("server", "secondary_port", fallback="8080")
+API_KEY         = cfg.get("server", "api_key",        fallback="")
+FULLSCREEN      = cfg.getboolean("display", "fullscreen",   fallback=True)
+REFRESH_SEC     = cfg.getint("display",    "refresh_sec",   fallback=4)
+FONT_SIZE       = cfg.getint("display",    "font_size",     fallback=22)
+COLUMNS         = cfg.getint("display",    "columns",       fallback=3)
+_statuses_raw   = cfg.get("display", "show_statuses", fallback="pending,confirmed,preparing")
+SHOW_STATUSES   = [s.strip() for s in _statuses_raw.split(",") if s.strip()]
 
-BASE_URL = f"http://{SERVER_HOST}:{SERVER_PORT}"
-HEADERS  = {"X-Api-Key": API_KEY}
-log.info("Backend: %s  refresh: %ds  statuses: %s", BASE_URL, REFRESH_SEC, SHOW_STATUSES)
+_urls = [f"http://{_PRIMARY_HOST}:{_PRIMARY_PORT}"]
+if _SECONDARY_HOST:
+    _urls.append(f"http://{_SECONDARY_HOST}:{_SECONDARY_PORT}")
+_active_base_url = _urls[0]
+
+HEADERS = {"X-Api-Key": API_KEY}
+log.info("Backend: primary=%s:%s  secondary=%s:%s  refresh: %ds  statuses: %s",
+         _PRIMARY_HOST, _PRIMARY_PORT, _SECONDARY_HOST, _SECONDARY_PORT,
+         REFRESH_SEC, SHOW_STATUSES)
+
+
+def _try_request(method, path, **kwargs):
+    global _active_base_url
+    order = [_active_base_url] + [u for u in _urls if u != _active_base_url]
+    last_exc = None
+    for base in order:
+        try:
+            resp = getattr(requests, method)(
+                f"{base}{path}", headers=HEADERS, timeout=6, **kwargs
+            )
+            resp.raise_for_status()
+            if base != _active_base_url:
+                log.warning("Failover: switched active backend %s → %s", _active_base_url, base)
+                _active_base_url = base
+            return resp
+        except Exception as e:
+            log.warning("Request to %s%s failed: %s", base, path, e)
+            last_exc = e
+    raise last_exc
 
 # ── Colors ─────────────────────────────────────────────────────────────────────
 C_BG     = "#0D0D0D"
@@ -136,11 +164,10 @@ class StatusUpdater(QThread):
 
     def run(self):
         try:
-            r = requests.patch(
-                f"{BASE_URL}/api/v1/orders/{self.order_id}/status",
+            r = _try_request(
+                "patch",
+                f"/api/v1/orders/{self.order_id}/status",
                 json={"status": self.new_status},
-                headers=HEADERS,
-                timeout=5,
             )
             r.raise_for_status()
             log.info("Status updated  order=%s  → %s", self.order_id, self.new_status)
@@ -157,11 +184,7 @@ class Poller(QThread):
 
     def run(self):
         try:
-            resp = requests.get(
-                f"{BASE_URL}/api/v1/queue",
-                headers=HEADERS,
-                timeout=5,
-            )
+            resp = _try_request("get", "/api/v1/queue")
             resp.raise_for_status()
             orders = resp.json()
             # Filter to only the statuses we care about

@@ -27,6 +27,7 @@ class SettingsOut(BaseModel):
     payment_gateway:   str
     idle_timeout_sec:  int
     kiosk_language:    str
+    waiting_video_url: Optional[str] = None
     model_config = {"from_attributes": True}
 
 
@@ -220,6 +221,11 @@ class DeliveryIntegrationOut(BaseModel):
 
 class OrderStatusUpdate(BaseModel):
     status: str
+
+
+class OrderPaymentUpdate(BaseModel):
+    payment_status: str          # "paid" | "refunded"
+    payment_method: Optional[str] = None   # "cash" | "card" | etc.
 
 
 # ── Reports ───────────────────────────────────────────────────────────────────

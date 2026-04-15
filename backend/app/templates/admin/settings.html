@@ -202,6 +202,23 @@
       </div>
 
       <div class="card">
+        <h2>Waiting Screen Video</h2>
+        <div class="form-group">
+          <label>Upload idle/waiting video (MP4 recommended)</label>
+          <input type="file" name="waiting_video" accept="video/*">
+          {% if s and s.waiting_video_url %}
+          <p style="margin-top:6px;font-size:12px;color:#888">
+            Current: <a href="{{ s.waiting_video_url }}" target="_blank">{{ s.waiting_video_url }}</a>
+          </p>
+          {% endif %}
+        </div>
+        <p style="font-size:11px;color:#888;margin-top:4px">
+          The kiosk loops this video when no customer interaction is detected.
+          Leave blank to keep the existing video. MP4 H.264 recommended.
+        </p>
+      </div>
+
+      <div class="card">
         <h2>Kiosk Behaviour</h2>
         <div class="form-group">
           <label>Idle Timeout (seconds – before screen reset)</label>

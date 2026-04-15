@@ -10,8 +10,17 @@ import json
 import logging
 import logging.handlers
 import configparser
+import tempfile
 import requests
 from datetime import datetime
+
+try:
+    from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent
+    from PyQt5.QtMultimediaWidgets import QVideoWidget
+    from PyQt5.QtCore import QUrl
+    _QT_MULTIMEDIA = True
+except ImportError:
+    _QT_MULTIMEDIA = False
 
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -64,31 +73,53 @@ log = logging.getLogger("kiosk")
 cfg = configparser.ConfigParser()
 cfg.read(os.path.join(os.path.dirname(os.path.abspath(__file__)), "kiosk.ini"))
 
-SERVER_HOST  = cfg.get("server",  "host",         fallback="localhost")
-SERVER_PORT  = cfg.get("server",  "port",         fallback="8000")
-API_KEY      = cfg.get("server",  "api_key",      fallback="")
-FULLSCREEN   = cfg.getboolean("kiosk", "fullscreen",   fallback=True)
-IDLE_TIMEOUT = cfg.getint("kiosk",    "idle_timeout",  fallback=120)
+_PRIMARY_HOST   = cfg.get("server", "primary_host",   fallback="localhost")
+_PRIMARY_PORT   = cfg.get("server", "primary_port",   fallback="8080")
+_SECONDARY_HOST = cfg.get("server", "secondary_host", fallback="")
+_SECONDARY_PORT = cfg.get("server", "secondary_port", fallback="8080")
+API_KEY         = cfg.get("server", "api_key",        fallback="")
+FULLSCREEN      = cfg.getboolean("kiosk", "fullscreen",   fallback=True)
+IDLE_TIMEOUT    = cfg.getint("kiosk",    "idle_timeout",  fallback=120)
 # Initial language from ini — overridden by server setting once loaded
-_ini_lang    = cfg.get("kiosk", "language", fallback="en")
+_ini_lang       = cfg.get("kiosk", "language", fallback="en")
 set_language(_ini_lang)
 
-BASE_URL = f"http://{SERVER_HOST}:{SERVER_PORT}"
-HEADERS  = {"X-Api-Key": API_KEY}
+_urls = [f"http://{_PRIMARY_HOST}:{_PRIMARY_PORT}"]
+if _SECONDARY_HOST:
+    _urls.append(f"http://{_SECONDARY_HOST}:{_SECONDARY_PORT}")
+_active_base_url = _urls[0]
+
+HEADERS = {"X-Api-Key": API_KEY}
 
 log.info("=" * 60)
-log.info("Kiosk starting  server=%s:%s  lang=%s", SERVER_HOST, SERVER_PORT, _ini_lang)
+log.info("Kiosk starting  primary=%s:%s  secondary=%s:%s  lang=%s",
+         _PRIMARY_HOST, _PRIMARY_PORT, _SECONDARY_HOST, _SECONDARY_PORT, _ini_lang)
 
-# ── HTTP helpers ──────────────────────────────────────────────────────────────
+# ── HTTP helpers with dual-IP failover ────────────────────────────────────────
+def _try_request(method, path, **kwargs):
+    global _active_base_url
+    order = [_active_base_url] + [u for u in _urls if u != _active_base_url]
+    last_exc = None
+    for base in order:
+        try:
+            resp = getattr(requests, method)(
+                f"{base}{path}", headers=HEADERS, timeout=10, **kwargs
+            )
+            resp.raise_for_status()
+            if base != _active_base_url:
+                log.warning("Failover: switched active backend %s → %s", _active_base_url, base)
+                _active_base_url = base
+            return resp.json()
+        except Exception as e:
+            log.warning("Request to %s%s failed: %s", base, path, e)
+            last_exc = e
+    raise last_exc
+
 def api_get(path):
-    r = requests.get(f"{BASE_URL}{path}", headers=HEADERS, timeout=10)
-    r.raise_for_status()
-    return r.json()
+    return _try_request("get", path)
 
 def api_post(path, data):
-    r = requests.post(f"{BASE_URL}{path}", json=data, headers=HEADERS, timeout=10)
-    r.raise_for_status()
-    return r.json()
+    return _try_request("post", path, json=data)
 
 # ── Theme constants (defaults; overridden from server settings) ───────────────
 PRIMARY    = "#FF6B00"
@@ -186,7 +217,7 @@ class ItemCard(QFrame):
 
         if item.get("image_url"):
             try:
-                resp = requests.get(f"{BASE_URL}{item['image_url']}", timeout=3)
+                resp = requests.get(f"{_active_base_url}{item['image_url']}", timeout=3)
                 pix  = QPixmap()
                 pix.loadFromData(resp.content)
                 img_label.setPixmap(
@@ -319,6 +350,57 @@ class CustomizeDialog(QDialog):
                     })
         return result
 
+# ── Idle video widget ─────────────────────────────────────────────────────────
+class IdleVideoWidget(QWidget):
+    """Full-screen looping video shown during idle. Requires python3-pyqt5.qtmultimedia."""
+
+    def __init__(self, video_url, base_url, parent=None):
+        super().__init__(parent)
+        self.setStyleSheet("background:black")
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        self._video = QVideoWidget()
+        layout.addWidget(self._video)
+
+        self._player = QMediaPlayer(self)
+        self._player.setVideoOutput(self._video)
+        self._player.mediaStatusChanged.connect(self._on_status)
+
+        local_path = self._resolve(video_url, base_url)
+        if local_path:
+            self._player.setMedia(QMediaContent(QUrl.fromLocalFile(local_path)))
+            self._player.play()
+        else:
+            log.warning("IdleVideoWidget: no video to play")
+
+    def _resolve(self, url, base_url):
+        if not url:
+            return None
+        full_url = url if url.startswith("http") else f"{base_url}{url}"
+        try:
+            resp = requests.get(full_url, timeout=30, stream=True)
+            resp.raise_for_status()
+            suffix = os.path.splitext(url)[-1] or ".mp4"
+            tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+            for chunk in resp.iter_content(65536):
+                tmp.write(chunk)
+            tmp.close()
+            log.info("IdleVideoWidget: video cached at %s", tmp.name)
+            return tmp.name
+        except Exception as e:
+            log.error("IdleVideoWidget: failed to download video: %s", e)
+            return None
+
+    def _on_status(self, status):
+        if status == QMediaPlayer.EndOfMedia:
+            self._player.setPosition(0)
+            self._player.play()
+
+    def stop(self):
+        self._player.stop()
+
+
 # ── Main kiosk window ─────────────────────────────────────────────────────────
 class KioskWindow(QMainWindow):
     def __init__(self):
@@ -435,7 +517,7 @@ class KioskWindow(QMainWindow):
         logo_lbl = QLabel()
         if s.get("logo_url"):
             try:
-                resp = requests.get(f"{BASE_URL}{s['logo_url']}", timeout=3)
+                resp = requests.get(f"{_active_base_url}{s['logo_url']}", timeout=3)
                 pix  = QPixmap()
                 pix.loadFromData(resp.content)
                 logo_lbl.setPixmap(
@@ -738,12 +820,35 @@ class KioskWindow(QMainWindow):
 
     def _idle_tick(self):
         self.idle_seconds += 1
-        if self.idle_seconds >= IDLE_TIMEOUT and self.cart:
-            log.info("Idle timeout — cart cleared")
-            self._clear_cart()
-            if self.categories:
-                self._select_category(self.categories[0]["id"])
+        timeout = self.settings_data.get("idle_timeout_sec", IDLE_TIMEOUT)
+        if self.idle_seconds >= timeout:
+            if self.cart:
+                log.info("Idle timeout — cart cleared")
+                self._clear_cart()
+            self._show_idle_screen()
             self.idle_seconds = 0
+
+    def _show_idle_screen(self):
+        if isinstance(self.centralWidget(), IdleVideoWidget):
+            return
+        video_url = self.settings_data.get("waiting_video_url")
+        if video_url and _QT_MULTIMEDIA:
+            widget = IdleVideoWidget(video_url, _active_base_url, self)
+            self.setCentralWidget(widget)
+            log.info("Idle screen: video started")
+        else:
+            if not _QT_MULTIMEDIA and video_url:
+                log.warning("QtMultimedia unavailable — idle video disabled")
+            self._build_loading_screen("Touch screen to order")
+
+    def _hide_idle_screen(self):
+        if isinstance(self.centralWidget(), IdleVideoWidget):
+            self.centralWidget().stop()
+            if self.categories:
+                self._build_main_ui()
+            else:
+                self._load_data()
+            log.info("Idle screen dismissed")
 
     def _update_clock(self):
         if hasattr(self, "clock_lbl"):
@@ -751,6 +856,7 @@ class KioskWindow(QMainWindow):
 
     def mousePressEvent(self, event):
         self._reset_idle()
+        self._hide_idle_screen()
         super().mousePressEvent(event)
 
     def keyPressEvent(self, event):

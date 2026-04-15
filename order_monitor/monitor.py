@@ -77,18 +77,44 @@ cfg = configparser.ConfigParser()
 cfg.read(_INI)
 log.info("Config loaded from %s", _INI)
 
-SERVER_HOST     = cfg.get("server",  "host",           fallback="localhost")
-SERVER_PORT     = cfg.get("server",  "port",           fallback="8000")
-API_KEY         = cfg.get("server",  "api_key",        fallback="")
-FULLSCREEN      = cfg.getboolean("display", "fullscreen",     fallback=True)
-REFRESH_SEC     = cfg.getint("display",    "refresh_sec",     fallback=5)
-FONT_SIZE       = cfg.getint("display",    "font_size",       fallback=28)
-COLUMNS         = cfg.getint("display",    "columns",         fallback=2)
-SHOW_COMPLETED  = cfg.getboolean("display","show_completed",  fallback=True)
+_PRIMARY_HOST   = cfg.get("server", "primary_host",   fallback="localhost")
+_PRIMARY_PORT   = cfg.get("server", "primary_port",   fallback="8080")
+_SECONDARY_HOST = cfg.get("server", "secondary_host", fallback="")
+_SECONDARY_PORT = cfg.get("server", "secondary_port", fallback="8080")
+API_KEY         = cfg.get("server", "api_key",        fallback="")
+FULLSCREEN      = cfg.getboolean("display", "fullscreen",    fallback=True)
+REFRESH_SEC     = cfg.getint("display",    "refresh_sec",    fallback=5)
+FONT_SIZE       = cfg.getint("display",    "font_size",      fallback=28)
+COLUMNS         = cfg.getint("display",    "columns",        fallback=2)
+SHOW_COMPLETED  = cfg.getboolean("display","show_completed", fallback=True)
 
-BASE_URL = f"http://{SERVER_HOST}:{SERVER_PORT}"
-HEADERS  = {"X-Api-Key": API_KEY}
-log.info("Backend: %s  refresh: %ds  columns: %d", BASE_URL, REFRESH_SEC, COLUMNS)
+_urls = [f"http://{_PRIMARY_HOST}:{_PRIMARY_PORT}"]
+if _SECONDARY_HOST:
+    _urls.append(f"http://{_SECONDARY_HOST}:{_SECONDARY_PORT}")
+_active_base_url = _urls[0]
+
+HEADERS = {"X-Api-Key": API_KEY}
+log.info("Backend: primary=%s:%s  secondary=%s:%s  refresh: %ds  columns: %d",
+         _PRIMARY_HOST, _PRIMARY_PORT, _SECONDARY_HOST, _SECONDARY_PORT,
+         REFRESH_SEC, COLUMNS)
+
+
+def _try_request(path):
+    global _active_base_url
+    order = [_active_base_url] + [u for u in _urls if u != _active_base_url]
+    last_exc = None
+    for base in order:
+        try:
+            resp = requests.get(f"{base}{path}", headers=HEADERS, timeout=6)
+            resp.raise_for_status()
+            if base != _active_base_url:
+                log.warning("Failover: switched active backend %s → %s", _active_base_url, base)
+                _active_base_url = base
+            return resp.json()
+        except Exception as e:
+            log.warning("Request to %s%s failed: %s", base, path, e)
+            last_exc = e
+    raise last_exc
 
 # ── Colors ─────────────────────────────────────────────────────────────────────
 C_BG        = "#0D0D0D"
@@ -123,9 +149,9 @@ class Poller(QThread):
 
     def run(self):
         try:
-            queue     = requests.get(f"{BASE_URL}/api/v1/queue",     headers=HEADERS, timeout=5).json()
-            completed = requests.get(f"{BASE_URL}/api/v1/completed", headers=HEADERS, timeout=5).json()
-            settings  = requests.get(f"{BASE_URL}/api/v1/settings",  headers=HEADERS, timeout=5).json()
+            queue     = _try_request("/api/v1/queue")
+            completed = _try_request("/api/v1/completed")
+            settings  = _try_request("/api/v1/settings")
             log.debug(
                 "Poll OK — queue: %d active, %d completed",
                 len(queue), len(completed),

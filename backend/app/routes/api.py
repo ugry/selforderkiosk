@@ -21,7 +21,8 @@ from app.models.models import (
 )
 from app.services import nav_invoice as nav_svc
 from app.schemas.schemas import (
-    CategoryOut, ItemOut, OrderCreate, OrderOut, OrderStatusUpdate, SettingsOut
+    CategoryOut, ItemOut, OrderCreate, OrderOut, OrderStatusUpdate,
+    OrderPaymentUpdate, SettingsOut,
 )
 from app.services.auth import verify_api_key
 from app.services.printer import print_kitchen_ticket, print_receipt
@@ -244,6 +245,55 @@ async def update_order_status(
     # Auto-submit NAV invoice when any machine marks the order as completed
     if body.status == "completed" and old_status != "completed":
         await _auto_nav_submit(db, order)
+    return order
+
+
+@router.patch("/orders/{order_id}/payment", response_model=OrderOut)
+async def update_order_payment(
+    order_id: UUID,
+    body: OrderPaymentUpdate,
+    machine: Machine = Depends(auth),
+    db: AsyncSession = Depends(get_db),
+):
+    """Mark an order as paid (or refunded). Called by the cashier app."""
+    from sqlalchemy.orm import selectinload
+    result = await db.execute(
+        select(Order)
+        .options(selectinload(Order.lines).selectinload(OrderItem.customizations))
+        .where(Order.id == order_id)
+    )
+    order = result.scalar_one_or_none()
+    if not order:
+        raise HTTPException(404, "Order not found")
+    old_pstatus         = order.payment_status
+    order.payment_status = body.payment_status
+    if body.payment_method:
+        order.payment_method = body.payment_method
+    logger.info(
+        "ORDER PAYMENT  queue=#%04d  %s → %s  method=%s  machine=%s",
+        order.queue_number, old_pstatus, body.payment_status,
+        order.payment_method, machine.name,
+    )
+    await db.flush()
+
+    # Print receipt on payment if machine has a printer configured
+    s_result = await db.execute(select(Setting).limit(1))
+    s = s_result.scalar_one_or_none()
+    if body.payment_status == "paid" and machine.printer_ip and s:
+        try:
+            print_receipt(
+                order,
+                s.restaurant_name or "Restaurant",
+                s.receipt_footer or "",
+                s.currency_symbol or "€",
+                machine.printer_ip,
+                machine.printer_port or 9100,
+            )
+            logger.info("Receipt printed  queue=#%04d  printer=%s",
+                        order.queue_number, machine.printer_ip)
+        except Exception as exc:
+            logger.error("Receipt print FAILED  queue=#%04d  error=%s",
+                         order.queue_number, exc)
     return order
 
 

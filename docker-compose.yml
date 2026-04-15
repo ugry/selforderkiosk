@@ -1,0 +1,152 @@
+services:
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: kiosk-postgres
+    restart: always
+    environment:
+      POSTGRES_DB:       restaurant_db
+      POSTGRES_USER:     kiosk
+      POSTGRES_PASSWORD: kiosk_pass
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+    networks: [kiosk_net]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kiosk"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: kiosk-redis
+    restart: always
+    networks: [kiosk_net]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  backend-1:
+    build: ./backend
+    container_name: kiosk-backend-1
+    restart: always
+    environment:
+      DATABASE_URL:   postgresql+asyncpg://kiosk:kiosk_pass@postgres:5432/restaurant_db
+      REDIS_URL:      redis://redis:6379/0
+      SECRET_KEY:     ${SECRET_KEY:-change-this-secret-in-production}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
+      INSTANCE_ID:    backend-1
+    volumes:
+      - uploads_data:/app/app/static/uploads
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis:    { condition: service_healthy }
+    networks: [kiosk_net]
+
+  backend-2:
+    build: ./backend
+    container_name: kiosk-backend-2
+    restart: always
+    environment:
+      DATABASE_URL:   postgresql+asyncpg://kiosk:kiosk_pass@postgres:5432/restaurant_db
+      REDIS_URL:      redis://redis:6379/0
+      SECRET_KEY:     ${SECRET_KEY:-change-this-secret-in-production}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
+      INSTANCE_ID:    backend-2
+    volumes:
+      - uploads_data:/app/app/static/uploads
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis:    { condition: service_healthy }
+    networks: [kiosk_net]
+
+  haproxy:
+    image: haproxy:2.9-alpine
+    container_name: kiosk-haproxy
+    restart: always
+    ports:
+      - "8090:8080"   # API + admin (all clients connect here)
+      - "8404:8404"   # HAProxy stats dashboard
+    volumes:
+      - ./haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    depends_on:
+      - backend-1
+      - backend-2
+    networks: [kiosk_net]
+
+  # ── Client apps (run with Xvfb virtual framebuffer) ───────────────────────
+
+  kiosk:
+    build: ./kiosk
+    container_name: kiosk-client
+    restart: unless-stopped
+    environment:
+      DISPLAY: ":99"
+    volumes:
+      - ./kiosk/kiosk.ini:/app/kiosk.ini:ro
+      - kiosk_logs:/app/logs
+    depends_on:
+      - haproxy
+    networks: [kiosk_net]
+    profiles: [clients]   # start with: docker compose --profile clients up -d
+
+  kitchen:
+    build: ./kitchen
+    container_name: kitchen-client
+    restart: unless-stopped
+    environment:
+      DISPLAY: ":99"
+    volumes:
+      - ./kitchen/kitchen.ini:/app/kitchen.ini:ro
+      - kitchen_logs:/app/logs
+    depends_on:
+      - haproxy
+    networks: [kiosk_net]
+    profiles: [clients]
+
+  cashier:
+    build: ./cashier
+    container_name: cashier-client
+    restart: unless-stopped
+    environment:
+      DISPLAY: ":99"
+    volumes:
+      - ./cashier/cashier.ini:/app/cashier.ini:ro
+      - cashier_logs:/app/logs
+    depends_on:
+      - haproxy
+    networks: [kiosk_net]
+    profiles: [clients]
+
+  # ── Test runner ───────────────────────────────────────────────────────────
+
+  tests:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.test
+    container_name: kiosk-tests
+    environment:
+      BASE_URL:     http://haproxy:8080
+      ADMIN_USER:   ${ADMIN_USERNAME:-admin}
+      ADMIN_PASS:   ${ADMIN_PASSWORD:-admin123}
+      TEST_API_KEY: ${TEST_API_KEY:-}
+    depends_on:
+      - haproxy
+    networks: [kiosk_net]
+    profiles: [test]
+
+volumes:
+  postgres_data:
+  uploads_data:
+  kiosk_logs:
+  kitchen_logs:
+  cashier_logs:
+
+networks:
+  kiosk_net:
+    driver: bridge
